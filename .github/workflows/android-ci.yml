@@ -9,9 +9,19 @@ on:
     branches:
       - main
 
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Choose APK type"
+        required: true
+        default: "debug"
+        type: choice
+        options:
+          - debug
+          - release
+
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -22,21 +32,55 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Make Gradle executable
         run: chmod +x ./gradlew
 
+      # -------------------------
+      # Debug / Release selection
+      # -------------------------
+
+      - name: Decode release keystore
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'release' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > pokemon-release.jks
+
+      - name: Create signing properties
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'release' }}
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          cat > keystore.properties <<EOF
+          storeFile=pokemon-release.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
       - name: Build Debug APK
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'debug' }}
         run: ./gradlew assembleDebug
 
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: pokemon-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+      - name: Build Release APK
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'release' }}
+        run: ./gradlew assembleRelease
+
+      # -------------------------
+      # Tests
+      # -------------------------
+
       - name: Run Unit Tests
         run: ./gradlew test
+
+      # -------------------------
+      # Android Lint
+      # -------------------------
+
       - name: Run Android Lint
         run: ./gradlew lint
 
@@ -44,12 +88,38 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-lint-report
-          path: app/build/reports/lint-results-debug.html
+          path: app/build/reports/lint/
+
+      # -------------------------
+      # JaCoCo
+      # -------------------------
+
       - name: Generate JaCoCo Coverage Report
         run: ./gradlew jacocoTestReport
+
+      - name: Verify JaCoCo Coverage
+        run: ./gradlew jacocoTestCoverageVerification
 
       - name: Upload JaCoCo Report
         uses: actions/upload-artifact@v4
         with:
           name: jacoco-report
           path: app/build/reports/jacoco/jacocoTestReport/html/
+
+      # -------------------------
+      # APK Artifact
+      # -------------------------
+
+      - name: Upload Debug APK
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'debug' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pokemon-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload Release APK
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'release' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pokemon-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
