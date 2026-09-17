@@ -3,6 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
+    id("jacoco")
+
 }
 android {
     namespace = "com.example.pokemonapp"
@@ -72,4 +74,49 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.kotlin)
+}
+tasks.register<JacocoReport>("jacocoTestReport") {
+    dependsOn("testDebugUnitTest")
+
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+
+    val fileFilter = listOf(
+        "**/R.class",
+        "**/R$*.class",
+        "**/BuildConfig.*",
+        "**/Manifest*.*",
+        "**/*Test*.*",
+        "**/*_Factory.class",
+        "**/*_HiltModules*",
+        "**/Hilt_*.class",
+        "**/*_GeneratedInjector.class",
+        "**/hilt_aggregated_deps/**",
+        "**/dagger/hilt/**"
+    )
+
+    val debugTree = fileTree(
+        layout.buildDirectory.dir(
+            "intermediates/classes/debug/transformDebugClassesWithAsm/dirs"
+        )
+    ) {
+        exclude(fileFilter)
+    }
+
+    classDirectories.setFrom(debugTree)
+
+    sourceDirectories.setFrom(
+        files(
+            "src/main/java",
+            "src/main/kotlin"
+        )
+    )
+
+    executionData.setFrom(
+        file(
+            "${layout.buildDirectory.get()}/jacoco/testDebugUnitTest.exec"
+        )
+    )
 }
