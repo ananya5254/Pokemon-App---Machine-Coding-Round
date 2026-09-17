@@ -18,7 +18,10 @@ on:
         type: choice
         options:
           - debug
-          - release
+          - releasepermissions:
+permissions:
+  contents: write
+
 
 jobs:
   build:
