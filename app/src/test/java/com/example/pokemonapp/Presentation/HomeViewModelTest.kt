@@ -110,6 +110,9 @@ class HomeViewModelTest {
         whenever(repository.getPokemonDetail("bulbasaur"))
             .thenReturn(fakeDetailResponse)
 
+        // Let the ViewModel's initial blank-search collection finish before
+        // exercising a direct search in this test.
+        advanceUntilIdle()
 
         // Act
         viewModel.searchPokemon("bulbasaur")
